@@ -62,6 +62,10 @@ export interface EcoseeCardConfig {
   temperature_entity?: string;
   /** Override humidity source when the climate entity has no `current_humidity`. */
   humidity_entity?: string;
+  /** Battery source for the Home Screen battery indicator: a `%` sensor or a battery
+   *  binary_sensor. Unset ⇒ the climate entity's `battery_level` / `battery`
+   *  attribute, else a battery entity auto-paired from the thermostat's device. */
+  battery_entity?: string;
   /** Glyph for custom Comfort Settings (presets without a built-in mapping). One of
    *  the Skin's icon names — `home` / `away` / `sleep` / `comfort`; anything else
    *  falls back to `comfort`. The named ecobee Comfort Settings keep their own icon. */
@@ -104,6 +108,8 @@ export interface EcoseeCardConfig {
    *  Absent/`false` means the name shows; the "unavailable" message keeps it either
    *  way, since that is the only thing telling you which thermostat dropped out. */
   hide_name?: boolean;
+  /** Hide the Home Screen battery indicator even when a battery source resolves. */
+  hide_battery?: boolean;
   /** Hide the heating/cooling edge glow on every surface. Absent/`false` keeps it. */
   hide_glow?: boolean;
   /** Any CSS color painted as the Card's canvas (Home, Standby and every Overlay),
@@ -146,6 +152,7 @@ export function parseConfig(raw: unknown): EcoseeCardConfig {
       | 'weather_entity'
       | 'temperature_entity'
       | 'humidity_entity'
+      | 'battery_entity'
       | 'default_comfort_icon'
       | 'fan_min_on_time_entity'
       | 'air_quality_entity'
@@ -167,6 +174,7 @@ export function parseConfig(raw: unknown): EcoseeCardConfig {
     weather_entity: optionalString('weather_entity'),
     temperature_entity: optionalString('temperature_entity'),
     humidity_entity: optionalString('humidity_entity'),
+    battery_entity: optionalString('battery_entity'),
     default_comfort_icon: optionalString('default_comfort_icon'),
     fan_min_on_time_entity: optionalString('fan_min_on_time_entity'),
     air_quality_entity: optionalString('air_quality_entity'),
@@ -176,6 +184,7 @@ export function parseConfig(raw: unknown): EcoseeCardConfig {
     standby_screen: parseOptionalBoolean(raw.standby_screen, 'standby_screen'),
     compact: parseOptionalBoolean(raw.compact, 'compact'),
     hide_name: parseOptionalBoolean(raw.hide_name, 'hide_name'),
+    hide_battery: parseOptionalBoolean(raw.hide_battery, 'hide_battery'),
     hide_glow: parseOptionalBoolean(raw.hide_glow, 'hide_glow'),
     background_color: optionalString('background_color'),
     standby: parseStandby(raw.standby),

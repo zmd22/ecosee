@@ -386,6 +386,7 @@ const miniSplit: Fixture = {
         swing_mode: 'vertical',
         swing_horizontal_modes: ['off', 'on'],
         swing_horizontal_mode: 'off',
+        battery_level: 18,
         min_temp: 61,
         max_temp: 86,
         target_temp_step: 1,

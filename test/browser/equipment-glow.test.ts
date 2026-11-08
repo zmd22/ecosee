@@ -39,6 +39,7 @@ function view(equipment: EquipmentStatus | null): HomeView {
     fanAvailable: false,
     airQuality: null,
     uvIndex: null,
+    battery: null,
   };
 }
 

@@ -118,6 +118,13 @@ export function editorSchema(): EditorField[] {
       selector: { entity: { domain: 'sensor', device_class: 'humidity' } },
     },
     {
+      name: 'battery_entity',
+      label: 'Battery entity',
+      helper:
+        "Optional. Battery shown on the Home Screen. Leave empty to use the thermostat's own battery, if it has one.",
+      selector: { entity: { domain: ['sensor', 'binary_sensor'], device_class: 'battery' } },
+    },
+    {
       name: 'air_quality_entity',
       label: 'Air quality entity',
       helper:
@@ -182,6 +189,12 @@ export function editorSchema(): EditorField[] {
       name: 'hide_name',
       label: 'Hide name',
       helper: 'Optional. Hides the thermostat name on the Home Screen and control screens.',
+      selector: { boolean: {} },
+    },
+    {
+      name: 'hide_battery',
+      label: 'Hide battery',
+      helper: 'Optional. Hides the battery indicator on the Home Screen.',
       selector: { boolean: {} },
     },
     {

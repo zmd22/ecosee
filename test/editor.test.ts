@@ -22,6 +22,7 @@ describe('editorSchema — coverage', () => {
       'weather_entity',
       'temperature_entity',
       'humidity_entity',
+      'battery_entity',
       'air_quality_entity',
       'uv_index_entity',
       'sensors',
@@ -30,6 +31,7 @@ describe('editorSchema — coverage', () => {
       'standby_screen',
       'compact',
       'hide_name',
+      'hide_battery',
       'hide_glow',
       'background_color',
     ]);

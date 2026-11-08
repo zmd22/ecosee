@@ -27,6 +27,7 @@ function view(overrides: Partial<HomeView> = {}): HomeView {
     fanAvailable: false,
     airQuality: null,
     uvIndex: null,
+    battery: null,
     ...overrides,
   };
 }

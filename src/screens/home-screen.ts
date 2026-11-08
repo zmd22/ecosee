@@ -9,7 +9,7 @@ import type {
 } from '../climate/home-view';
 import { formatTemp } from '../climate/home-view';
 import { systemModeGlyph } from '../climate/system-mode';
-import { icons, weatherIcon } from '../icons';
+import { batteryGlyph, icons, weatherIcon } from '../icons';
 import { renderShape, shapeStyles } from '../styles/shape';
 
 /** Actions the Home Screen surfaces to the host card. `temperature` opens the
@@ -281,6 +281,28 @@ export class EcoseeHomeScreen extends LitElement {
         letter-spacing: 0.02em;
         color: var(--ecosee-accent, #62cfe9);
       }
+      .stats {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5cqw;
+      }
+      .battery {
+        display: inline-flex;
+        align-items: center;
+        gap: 1.2cqw;
+        font-size: 7cqw;
+        font-weight: 300;
+        letter-spacing: 0.02em;
+        color: var(--ecosee-accent, #62cfe9);
+      }
+      .battery .glyph {
+        width: 7.5cqw;
+        height: 7.5cqw;
+      }
+      .battery.low {
+        color: var(--ecosee-heat, #f3a13c);
+      }
       .hum .glyph {
         width: 6cqw;
         height: 6cqw;
@@ -526,13 +548,7 @@ export class EcoseeHomeScreen extends LitElement {
             view.available
               ? html`
                   ${view.showName ? html`<div class="name" part="name">${view.name}</div>` : nothing}
-                  ${
-                    view.humidity !== null
-                      ? html`<div class="hum">
-                          <span class="glyph">${icons.humidity}</span>${Math.round(view.humidity)}%
-                        </div>`
-                      : nothing
-                  }
+                  ${this._renderStats(view)}
                   <button
                     class="temp"
                     aria-label="Adjust temperature"
@@ -636,6 +652,39 @@ export class EcoseeHomeScreen extends LitElement {
    *  blue Cool oval, matching how the device presents them (heat left, cool right in
    *  Heat / Cool (Auto); a single centered oval in Heat-only / Cool-only). Each oval
    *  is a tap target that opens Temperature Adjust for its own setpoint. */
+  /** The status line above the big number: humidity and/or the battery, side by
+   *  side. Either is hidden when its data is absent; the line disappears when both
+   *  are. A low battery turns amber (the heat token) so it reads as a warning. */
+  private _renderStats(view: HomeView): TemplateResult | typeof nothing {
+    const { humidity, battery } = view;
+    if (humidity === null && !battery) return nothing;
+    return html`
+      <div class="stats">
+        ${
+          humidity !== null
+            ? html`<div class="hum">
+                <span class="glyph">${icons.humidity}</span>${Math.round(humidity)}%
+              </div>`
+            : nothing
+        }
+        ${
+          battery
+            ? html`<div class="battery ${battery.low ? 'low' : ''}" part="battery">
+                <span class="glyph">${batteryGlyph(battery.level)}</span>${
+                  battery.level !== null ? html`${battery.level}%` : battery.low ? 'Low' : nothing
+                }
+                <span class="sr-only"
+                  >Battery${battery.level !== null ? ` ${battery.level}%` : ''}${
+                    battery.low ? ', low' : ''
+                  }</span
+                >
+              </div>`
+            : nothing
+        }
+      </div>
+    `;
+  }
+
   private _renderSetpoints(view: HomeView): TemplateResult | typeof nothing {
     const setpoints = view.setpoints;
     if (!setpoints || (setpoints.heat === null && setpoints.cool === null)) return nothing;

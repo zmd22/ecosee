@@ -2,6 +2,7 @@ import type { HomeAssistant } from '../types/hass';
 import type { EcoseeCardConfig } from '../config';
 import { num } from './parse';
 import { toFanModel, showFanAffordance } from './fan';
+import { toBattery, type BatteryView } from './battery';
 
 // The graceful-degradation seam (ADR-0001). `toHomeView` is a pure function from
 // raw `hass` + config to a normalized, already-degraded view model: every field
@@ -92,6 +93,9 @@ export interface HomeView {
   /** The optional UV-index gauge, or `null` when no usable `uv_index_entity` is
    *  configured (the gauge is then hidden — ADR-0001 graceful degradation). */
   uvIndex: UvIndexView | null;
+  /** The thermostat's battery, or `null` when no battery source resolves (or
+   *  `hide_battery` is set) — the indicator is then hidden. See `toBattery`. */
+  battery: BatteryView | null;
 }
 
 /** Entity states that carry no usable data — a Card/Overlay degrades to its
@@ -269,6 +273,7 @@ export function toHomeView(hass: HomeAssistant, config: EcoseeCardConfig): HomeV
       fanAvailable: false,
       airQuality: toAirQuality(hass, config),
       uvIndex: toUvIndex(hass, config),
+      battery: null,
     };
   }
 
@@ -297,6 +302,7 @@ export function toHomeView(hass: HomeAssistant, config: EcoseeCardConfig): HomeV
     fanAvailable: showFanAffordance(toFanModel(hass, config), config.show_fan),
     airQuality: toAirQuality(hass, config),
     uvIndex: toUvIndex(hass, config),
+    battery: toBattery(hass, config),
   };
 }
 

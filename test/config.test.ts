@@ -289,3 +289,17 @@ describe('parseConfig — standby (per-element visibility, YAML-only)', () => {
     );
   });
 });
+
+describe('parseConfig — battery', () => {
+  it('passes battery_entity and hide_battery through', () => {
+    const parsed = parseConfig({ ...base, battery_entity: 'sensor.b', hide_battery: true });
+    expect(parsed.battery_entity).toBe('sensor.b');
+    expect(parsed.hide_battery).toBe(true);
+  });
+
+  it('throws when battery_entity is not a string', () => {
+    expect(() => parseConfig({ ...base, battery_entity: 5 })).toThrow(
+      /`battery_entity` must be a string/,
+    );
+  });
+});

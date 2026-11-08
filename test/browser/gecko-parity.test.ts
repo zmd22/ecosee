@@ -55,6 +55,7 @@ const HOME_VIEW: HomeView = {
   weatherCondition: null,
   airQuality: null,
   uvIndex: null,
+  battery: null,
 };
 
 const TEMP_ADJUST_MODEL: TempAdjustModel = {

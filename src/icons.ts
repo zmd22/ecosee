@@ -9,6 +9,18 @@ import { svg, type SVGTemplateResult } from 'lit';
 const wrap = (body: SVGTemplateResult): SVGTemplateResult =>
   svg`<svg viewBox="0 0 24 24" width="100%" height="100%" aria-hidden="true">${body}</svg>`;
 
+/** Battery glyph: a horizontal cell outline with a terminal nub, filled to `level`
+ *  percent (a full cell for a low/OK-only source with no percentage). */
+export function batteryGlyph(level: number | null): SVGTemplateResult {
+  const width = (14 * Math.max(0, Math.min(100, level ?? 100))) / 100;
+  return wrap(svg`
+    <rect x="2" y="7" width="18" height="10" rx="2.2" fill="none" stroke="currentColor"
+      stroke-width="1.8" />
+    <rect x="20.6" y="10" width="1.8" height="4" rx="0.6" fill="currentColor" />
+    <rect x="4" y="9" width=${width} height="6" rx="0.8" fill="currentColor" />
+  `);
+}
+
 export const icons = {
   /** Main Menu affordance — a cog (gear): a toothed ring with a hollow hub (the
    *  inner circle is a second sub-path, so the even-odd fill punches the hub out).
