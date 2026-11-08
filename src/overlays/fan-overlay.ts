@@ -3,13 +3,17 @@ import { customElement, property, state } from 'lit/decorators.js';
 import {
   setFanModeCall,
   setFanMinOnTimeCall,
+  setSwingModeCall,
   type FanModel,
   type FanOption,
   type MinRuntimeModel,
+  type SwingAxis,
+  type SwingModel,
+  type SwingOption,
 } from '../climate/fan';
 import { icons } from '../icons';
 import { emitServiceCall } from './service-call-event';
-import { reschedulePickerClose } from './overlay-dismiss';
+import { emitOverlayDismiss, reschedulePickerClose } from './overlay-dismiss';
 
 /**
  * `<ecosee-fan-overlay>` — the Fan sub-screen's content (slotted into
@@ -30,17 +34,31 @@ import { reschedulePickerClose } from './overlay-dismiss';
  * but keeps the screen open (so you can set runtime *and* a fan mode in one visit;
  * closing on a native-select change would also be jarring). A runtime change is
  * ignored once a fan-mode pick has started the closing beat.
+ *
+ * Swing: when the entity lists `swing_modes` (and/or `swing_horizontal_modes`), a
+ * Swing selector follows the fan modes. With swing present the screen becomes a
+ * multi-setting panel, so neither a fan-mode nor a swing pick auto-closes (you can
+ * set both in one visit); each highlights optimistically until `hass` echoes the
+ * value back, and the inactivity timer still returns the card Home.
+ *
+ * The body scrolls when its content outgrows the surface (many fan speeds + swing
+ * + the runtime block, or the tab bar's reserved inset), instead of being clipped
+ * by the shell's overflow:hidden. Taps on its empty areas still dismiss.
  */
 @customElement('ecosee-fan-overlay')
 export class EcoseeFanOverlay extends LitElement {
-  /** The fan options + optional runtime selector, derived by the host from `hass`. */
+  /** The fan options + swing + optional runtime selector, derived by the host from `hass`. */
   @property({ attribute: false }) model?: FanModel;
-  /** The bound climate entity the emitted `set_fan_mode` call targets. */
+  /** The bound climate entity the emitted calls target. */
   @property({ attribute: false }) entityId = '';
   /** The optimistically-chosen fan mode, set on tap so the segment fills before the
-   *  device echoes back (issue #38); `null` until a pick. Doubles as the
-   *  "a pick is settling" guard until the overlay auto-closes. */
+   *  device echoes back (issue #38); `null` until a pick (or once echoed, when the
+   *  screen stays open). */
   @state() private _pending: string | null = null;
+  /** Optimistically-chosen swing mode per axis, cleared once `hass` echoes it. */
+  @state() private _pendingSwing: Partial<Record<SwingAxis, string>> = {};
+  /** True once a fan-mode pick has started the closing beat (no-swing layout). */
+  private _closing = false;
   /** Handle for the pending auto-close, cancelled if the overlay is torn down first. */
   private _closeTimer?: ReturnType<typeof setTimeout>;
 
@@ -53,7 +71,10 @@ export class EcoseeFanOverlay extends LitElement {
 
     /* Title near the top with the controls beneath (fan-mode.jpeg), not a
        vertically-centered cluster. Inline-size container so everything scales with
-       cqw off the definite width, with the root's own padding/gap in the fixed unit (calc · --ecosee-u) so they can't couple to the viewport, the real bug — a container-type element resolves its OWN cqw against the viewport (issue #35). */
+       cqw off the definite width, with the root's own padding/gap in the fixed unit (calc · --ecosee-u) so they can't couple to the viewport, the real bug — a container-type element resolves its OWN cqw against the viewport (issue #35).
+       The root scrolls (hidden scrollbar, touch device) so tall content — many
+       speeds, swing, the runtime block — is reachable rather than clipped by the
+       shell; it reserves the tab bar's inset at the bottom when one is shown. */
     .fan {
       container-type: inline-size;
       box-sizing: border-box;
@@ -62,11 +83,49 @@ export class EcoseeFanOverlay extends LitElement {
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: flex-start;
-      gap: calc(6 * var(--ecosee-u, 4.6px));
-      padding: calc(13 * var(--ecosee-u, 4.6px)) calc(9 * var(--ecosee-u, 4.6px))
-        calc(9 * var(--ecosee-u, 4.6px));
+      padding: calc(10 * var(--ecosee-u, 4.6px)) calc(9 * var(--ecosee-u, 4.6px))
+        max(calc(7 * var(--ecosee-u, 4.6px)), var(--ecosee-tabbar-inset, 0px));
       text-align: center;
+    }
+
+    /* The scroll viewport, bounded between the name/✕ strip and the tab bar so
+       scrolled content never slides under shell chrome; its edges fade out (the
+       padding matches the fade so unscrolled content sits fully opaque). Opts back
+       into pointer events so it can scroll; taps on its empty areas dismiss. */
+    .scroll {
+      flex: 1 1 auto;
+      min-height: 0;
+      width: 100%;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5cqw;
+      padding: 4cqw 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-width: none;
+      pointer-events: auto;
+      -webkit-mask-image: linear-gradient(
+        transparent,
+        #000 4cqw,
+        #000 calc(100% - 4cqw),
+        transparent
+      );
+      mask-image: linear-gradient(transparent, #000 4cqw, #000 calc(100% - 4cqw), transparent);
+    }
+    .scroll::-webkit-scrollbar {
+      display: none;
+    }
+    .scroll > * {
+      flex: none;
+    }
+
+    .group {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3.5cqw;
     }
 
     .title {
@@ -103,6 +162,7 @@ export class EcoseeFanOverlay extends LitElement {
       min-width: 22cqw;
       border-radius: 100cqw;
       cursor: pointer;
+      white-space: nowrap;
     }
     .segment:focus-visible {
       outline: 0.5cqw solid var(--ecosee-accent, #62cfe9);
@@ -114,23 +174,43 @@ export class EcoseeFanOverlay extends LitElement {
       cursor: default;
     }
 
-    /* Multi-speed layout (issue #44): past the device's two modes a horizontal pill
-       gets cramped, so stack the segments into a proper N-way selector — a rounded
-       cyan-outlined panel of full-width capsule segments, the active one filled. Each
-       segment keeps the same fill/outline language, so a two-mode fan (the common
-       case) is untouched. */
+    /* Multi-option layout (issue #44): past two options a horizontal pill gets
+       cramped, and a single full-width column ran off the bottom of the surface,
+       so lay them out as a two-column grid of capsule segments inside a rounded
+       cyan-outlined panel (an odd last option spans both columns). Each segment
+       keeps the same fill/outline language, so a two-mode fan is untouched. */
     .toggle.stacked {
-      flex-direction: column;
-      align-items: stretch;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
       gap: 1.2cqw;
-      width: 64cqw;
+      width: 72cqw;
       max-width: 100%;
-      border-radius: 9cqw;
+      box-sizing: border-box;
+      border-radius: 7cqw;
     }
     .toggle.stacked .segment {
       min-width: 0;
       width: 100%;
-      padding: 3cqw 4cqw;
+      padding: 2.6cqw 2cqw;
+      font-size: 6cqw;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .toggle.stacked .segment:last-child:nth-child(odd) {
+      grid-column: 1 / -1;
+    }
+
+    /* With swing present the screen carries two selectors, so tighten the type. */
+    .fan.dense .title {
+      font-size: 6.5cqw;
+    }
+    .fan.dense .segment {
+      font-size: 6cqw;
+      padding: 2.4cqw 7cqw;
+    }
+    .fan.dense .toggle.stacked .segment {
+      padding: 2.2cqw 2cqw;
+      font-size: 5.5cqw;
     }
 
     /* Minimum-runtime block: bold summary line, instructional hint, then the
@@ -140,7 +220,6 @@ export class EcoseeFanOverlay extends LitElement {
       flex-direction: column;
       align-items: center;
       gap: 4cqw;
-      margin-top: 2cqw;
     }
     .summary {
       margin: 0;
@@ -201,8 +280,6 @@ export class EcoseeFanOverlay extends LitElement {
       font: inherit;
       opacity: 0;
       cursor: pointer;
-      /* The shell makes slotted content pointer-transparent; this control opts back
-         in (the decorative label/caret above stay transparent → empty taps dismiss). */
       pointer-events: auto;
     }
     .select-pill:focus-within {
@@ -216,23 +293,84 @@ export class EcoseeFanOverlay extends LitElement {
     }
   `;
 
+  /** Drop optimistic picks once `hass` reports them, so the highlight follows the
+   *  entity again (only relevant while the screen stays open after a pick). */
+  protected override willUpdate(changed: Map<PropertyKey, unknown>): void {
+    if (!changed.has('model') || !this.model) return;
+    if (!this._closing && this._pending !== null) {
+      const echoed = this.model.options.some((o) => o.selected && o.fanMode === this._pending);
+      if (echoed) this._pending = null;
+    }
+    const next = { ...this._pendingSwing };
+    let dirty = false;
+    for (const swing of this.model.swing) {
+      const pending = next[swing.axis];
+      if (
+        pending !== undefined &&
+        swing.options.some((o) => o.selected && o.swingMode === pending)
+      ) {
+        delete next[swing.axis];
+        dirty = true;
+      }
+    }
+    if (dirty) this._pendingSwing = next;
+  }
+
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     if (this._closeTimer !== undefined) clearTimeout(this._closeTimer);
   }
 
+  /** Whether a fan-mode pick closes the screen: only in the single-selector layout.
+   *  With swing on the same screen it stays open so both can be set in one visit. */
+  private get _pickCloses(): boolean {
+    return (this.model?.swing.length ?? 0) === 0;
+  }
+
   private _selectMode(option: FanOption): void {
-    if (this._pending === option.fanMode) return; // already the settling pick — nothing to do
-    // Tapping the current fan mode with no pick in flight: nothing to write, but
-    // honour "nothing left to do" by closing anyway (issue #39).
-    const noChange = this._pending === null && option.selected;
+    if (this._closing) {
+      // A correction tap during the confirm beat re-points the pick and restarts it.
+      if (this._pending === option.fanMode) return;
+      this._pending = option.fanMode;
+      emitServiceCall(this, setFanModeCall(option.fanMode, this.entityId));
+      this._closeTimer = reschedulePickerClose(this, this._closeTimer);
+      return;
+    }
+    const current = this._pending ?? this.model?.options.find((o) => o.selected)?.fanMode;
+    const noChange = current === option.fanMode;
+    if (!this._pickCloses) {
+      if (noChange) return; // panel layout: nothing to write, nothing to close
+      this._pending = option.fanMode;
+      emitServiceCall(this, setFanModeCall(option.fanMode, this.entityId));
+      return;
+    }
+    // Tapping the current fan mode: nothing to write, but honour "nothing left to
+    // do" by closing anyway (issue #39).
     this._pending = option.fanMode; // fill / hold the segment now (issue #38)
+    this._closing = true;
     if (!noChange) emitServiceCall(this, setFanModeCall(option.fanMode, this.entityId));
     this._closeTimer = reschedulePickerClose(this, this._closeTimer); // confirm beat, then close
   }
 
+  private _selectSwing(swing: SwingModel, option: SwingOption): void {
+    if (this._closing) return;
+    const current =
+      this._pendingSwing[swing.axis] ?? swing.options.find((o) => o.selected)?.swingMode;
+    if (current === option.swingMode) return;
+    this._pendingSwing = { ...this._pendingSwing, [swing.axis]: option.swingMode };
+    emitServiceCall(this, setSwingModeCall(option.swingMode, swing.axis, this.entityId));
+  }
+
+  /** Taps on the body's empty areas (and its non-control text) dismiss, matching
+   *  the shell backdrop that the now pointer-active scroll body covers. */
+  private _onBodyClick(event: Event): void {
+    const target = event.target as Element | null;
+    if (target?.closest('button, select, .select-pill')) return;
+    emitOverlayDismiss(this);
+  }
+
   private _onRuntimeChange(event: Event, runtime: MinRuntimeModel): void {
-    if (this._pending !== null) return; // a fan-mode pick is settling — ignore
+    if (this._closing) return; // a fan-mode pick is settling — ignore
     const value = Number((event.target as HTMLSelectElement).value);
     if (!Number.isFinite(value) || value === runtime.value) return;
     emitServiceCall(this, setFanMinOnTimeCall(value, runtime.entityId));
@@ -241,16 +379,29 @@ export class EcoseeFanOverlay extends LitElement {
   override render(): TemplateResult | typeof nothing {
     const model = this.model;
     if (!model || !model.available) return nothing;
+    const dense = model.swing.length > 0;
+    return html`
+      <div class="fan ${dense ? 'dense' : ''}">
+        <div class="scroll" @click=${this._onBodyClick}>
+          ${model.options.length > 0 ? this._renderFanModes(model.options) : nothing}
+          ${model.swing.map((swing) => this._renderSwing(swing, model.swing.length > 1))}
+          ${this._renderRuntime(model.minRuntime)}
+        </div>
+      </div>
+    `;
+  }
+
+  private _renderFanModes(options: FanOption[]): TemplateResult {
     // Two modes (the device's On / Auto) fit the horizontal pill; more than that
     // (a multi-speed fan: low / medium / high / …) would cram a stretched pill, so
-    // stack them into a vertical N-way selector instead (issue #44).
-    const stacked = model.options.length > 2;
+    // lay them out as a two-column N-way selector instead (issue #44).
+    const stacked = options.length > 2;
     return html`
-      <div class="fan">
+      <div class="group">
         <h2 class="title">Fan Mode</h2>
         <div class="toggle ${stacked ? 'stacked' : ''}" role="group" aria-label="Fan Mode">
-          ${model.options.map((option) => {
-            // Once a pick is settling, the optimistic choice wins the fill;
+          ${options.map((option) => {
+            // While a pick is pending, the optimistic choice wins the fill;
             // otherwise it follows the entity's reported fan mode.
             const selected =
               this._pending !== null ? option.fanMode === this._pending : option.selected;
@@ -265,7 +416,35 @@ export class EcoseeFanOverlay extends LitElement {
             `;
           })}
         </div>
-        ${this._renderRuntime(model.minRuntime)}
+      </div>
+    `;
+  }
+
+  private _renderSwing(swing: SwingModel, bothAxes: boolean): TemplateResult {
+    const title = bothAxes
+      ? swing.axis === 'horizontal'
+        ? 'Horizontal Swing'
+        : 'Vertical Swing'
+      : 'Swing';
+    const pending = this._pendingSwing[swing.axis];
+    const stacked = swing.options.length > 2;
+    return html`
+      <div class="group swing">
+        <h2 class="title">${title}</h2>
+        <div class="toggle ${stacked ? 'stacked' : ''}" role="group" aria-label=${title}>
+          ${swing.options.map((option) => {
+            const selected = pending !== undefined ? option.swingMode === pending : option.selected;
+            return html`
+              <button
+                class="segment ${selected ? 'selected' : ''}"
+                aria-pressed=${selected}
+                @click=${() => this._selectSwing(swing, option)}
+              >
+                ${option.label}
+              </button>
+            `;
+          })}
+        </div>
       </div>
     `;
   }

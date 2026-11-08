@@ -79,9 +79,20 @@ export class EcoseeSystemModeOverlay extends LitElement {
       margin: 0;
       box-sizing: border-box;
       width: 100%;
-      padding: 5.5cqw 4cqw;
+      /* Rows share a fixed vertical budget so the list always fits the surface: the
+         device's four modes keep their full-size rows, while an entity listing more
+         (Heat / Cool / Heat-Cool / Auto / Dry / Fan only / Off) shrinks every row
+         and its label together instead of overflowing past the top and bottom
+         edges, where the shell's overflow:hidden truncated them. --rows is set
+         inline from the option count. */
+      height: min(20cqw, calc(76cqw / var(--rows, 4)));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 4cqw;
       font: inherit;
-      font-size: 8cqw;
+      font-size: min(8cqw, calc(76cqw / var(--rows, 4) * 0.42));
+      line-height: 1.1;
       font-weight: 500;
       color: var(--ecosee-accent, #62cfe9);
       text-align: center;
@@ -127,7 +138,12 @@ export class EcoseeSystemModeOverlay extends LitElement {
     if (!model || !model.available) return nothing;
     return html`
       <div class="picker">
-        <div class="list" role="group" aria-label="System Mode">
+        <div
+          class="list"
+          role="group"
+          aria-label="System Mode"
+          style="--rows: ${model.options.length}"
+        >
           ${model.options.map((option) => {
             // Once a pick is settling, the optimistic choice wins the highlight;
             // otherwise it follows the entity's reported mode.

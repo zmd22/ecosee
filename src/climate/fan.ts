@@ -41,10 +41,33 @@ export interface MinRuntimeModel {
   summary: string;
 }
 
+/** One swing-mode segment: the raw `swing_mode` (or `swing_horizontal_mode`) string
+ *  to write back, its display label, and whether it is the current value. */
+export interface SwingOption {
+  swingMode: string;
+  label: string;
+  selected: boolean;
+}
+
+/** Which swing axis a selector drives: Home Assistant's `swing_mode` (vertical /
+ *  generic louvre swing) or the separate `swing_horizontal_mode` (HA 2024.12+). */
+export type SwingAxis = 'vertical' | 'horizontal';
+
+/** A swing selector, present only when the entity lists modes for that axis. */
+export interface SwingModel {
+  axis: SwingAxis;
+  options: SwingOption[];
+}
+
 export interface FanModel {
-  /** False when the entity lists no `fan_modes` — the whole sub-screen is hidden. */
+  /** False when the entity lists neither `fan_modes` nor any swing modes — the
+   *  whole sub-screen is hidden. */
   available: boolean;
+  /** The fan-mode segments; empty for a swing-only entity. */
   options: FanOption[];
+  /** Swing selectors (vertical first, then horizontal), only the axes the entity
+   *  supports. Empty when it exposes no swing control. */
+  swing: SwingModel[];
   /** Null when no `fan_min_on_time` number entity is configured/available. */
   minRuntime: MinRuntimeModel | null;
 }
@@ -139,32 +162,57 @@ function toMinRuntimeModel(hass: HomeAssistant, config: EcoseeCardConfig): MinRu
   };
 }
 
+const UNAVAILABLE_FAN: FanModel = { available: false, options: [], swing: [], minRuntime: null };
+
+/** The string entries of a list attribute (non-strings dropped, duplicates
+ *  collapsed), or `[]` when the attribute is absent or not a list. */
+function stringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.filter((entry): entry is string => typeof entry === 'string'))];
+}
+
+/** Build one swing axis's selector from its `*_modes` list + current value
+ *  attributes; null when the entity lists no modes for that axis. */
+function toSwingModel(
+  attributes: Record<string, unknown>,
+  axis: SwingAxis,
+  modesKey: string,
+  currentKey: string,
+): SwingModel | null {
+  const modes = stringList(attributes[modesKey]);
+  if (modes.length === 0) return null;
+  const current = typeof attributes[currentKey] === 'string' ? attributes[currentKey] : null;
+  return {
+    axis,
+    options: modes.map((swingMode) => ({
+      swingMode,
+      label: labelFor(swingMode),
+      selected: swingMode === current,
+    })),
+  };
+}
+
 export function toFanModel(hass: HomeAssistant, config: EcoseeCardConfig): FanModel {
   const entity = hass.states[config.entity];
-  if (!entity || UNAVAILABLE.has(entity.state)) {
-    return { available: false, options: [], minRuntime: null };
-  }
+  if (!entity || UNAVAILABLE.has(entity.state)) return UNAVAILABLE_FAN;
 
-  const fanModes = entity.attributes.fan_modes;
-  if (!Array.isArray(fanModes) || fanModes.length === 0) {
-    return { available: false, options: [], minRuntime: null };
-  }
+  const attributes = entity.attributes as Record<string, unknown>;
+  const current = typeof attributes.fan_mode === 'string' ? attributes.fan_mode : null;
 
-  const strings = fanModes.filter((mode): mode is string => typeof mode === 'string');
-  const current =
-    typeof entity.attributes.fan_mode === 'string' ? entity.attributes.fan_mode : null;
-
-  const options: FanOption[] = orderFanModes(strings).map((fanMode) => ({
+  const options: FanOption[] = orderFanModes(stringList(attributes.fan_modes)).map((fanMode) => ({
     fanMode,
     label: labelFor(fanMode),
     selected: fanMode === current,
   }));
 
-  if (options.length === 0) {
-    return { available: false, options: [], minRuntime: null };
-  }
+  const swing = [
+    toSwingModel(attributes, 'vertical', 'swing_modes', 'swing_mode'),
+    toSwingModel(attributes, 'horizontal', 'swing_horizontal_modes', 'swing_horizontal_mode'),
+  ].filter((model): model is SwingModel => model !== null);
 
-  return { available: true, options, minRuntime: toMinRuntimeModel(hass, config) };
+  if (options.length === 0 && swing.length === 0) return UNAVAILABLE_FAN;
+
+  return { available: true, options, swing, minRuntime: toMinRuntimeModel(hass, config) };
 }
 
 /** Whether the fan offers a genuine *speed* control — at least one mode beyond the
@@ -201,6 +249,27 @@ export function setFanModeCall(fanMode: string, entityId: string): ServiceCall {
     service: 'set_fan_mode',
     data: { entity_id: entityId, fan_mode: fanMode },
   };
+}
+
+/** Build the swing call for the chosen mode on the given axis:
+ *  `climate.set_swing_mode` for the vertical / generic axis, or
+ *  `climate.set_swing_horizontal_mode` for the horizontal one. */
+export function setSwingModeCall(
+  swingMode: string,
+  axis: SwingAxis,
+  entityId: string,
+): ServiceCall {
+  return axis === 'horizontal'
+    ? {
+        domain: 'climate',
+        service: 'set_swing_horizontal_mode',
+        data: { entity_id: entityId, swing_horizontal_mode: swingMode },
+      }
+    : {
+        domain: 'climate',
+        service: 'set_swing_mode',
+        data: { entity_id: entityId, swing_mode: swingMode },
+      };
 }
 
 /** Build the `number.set_value` call that sets the fan's minimum hourly runtime on

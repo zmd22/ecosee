@@ -363,6 +363,37 @@ const unavailableWithAirQuality: Fixture = {
   }),
 };
 
+// A mini-split / heat-pump style entity: every System Mode Home Assistant knows,
+// a five-speed fan and both swing axes. Exercises the System Mode picker fitting
+// seven rows, and the Fan screen's speed grid + Swing selectors (scrolls if needed).
+const miniSplit: Fixture = {
+  label: 'Mini-split (all modes + swing)',
+  config: { type: 'custom:ecosee-card', entity: 'climate.mini_split' },
+  hass: makeHass({
+    climate: {
+      entity_id: 'climate.mini_split',
+      state: 'cool',
+      attributes: {
+        friendly_name: 'Mini-split',
+        current_temperature: 75,
+        current_humidity: 48,
+        temperature: 72,
+        hvac_action: 'cooling',
+        hvac_modes: ['off', 'heat', 'cool', 'heat_cool', 'auto', 'dry', 'fan_only'],
+        fan_modes: ['auto', 'quiet', 'low', 'medium', 'high', 'turbo'],
+        fan_mode: 'medium',
+        swing_modes: ['off', 'vertical', 'horizontal', 'both'],
+        swing_mode: 'vertical',
+        swing_horizontal_modes: ['off', 'on'],
+        swing_horizontal_mode: 'off',
+        min_temp: 61,
+        max_temp: 86,
+        target_temp_step: 1,
+      },
+    },
+  }),
+};
+
 export const fixtures: Fixture[] = [
   ecobeeAuto,
   ecobeeHeating,
@@ -370,6 +401,7 @@ export const fixtures: Fixture[] = [
   ecobeeOff,
   ecobeeSensors,
   ecobeeAirQuality,
+  miniSplit,
   genericDegraded,
   unavailable,
   unavailableWithAirQuality,

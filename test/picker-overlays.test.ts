@@ -305,4 +305,55 @@ describe('Fan picker — mode selects-and-closes, runtime applies without closin
       },
     ]);
   });
+
+  it('with swing present: shows a Swing selector, and neither pick auto-closes', async () => {
+    const { hass } = fakeHass({
+      entities: [fanEntity({ swing_modes: ['off', 'on'], swing_mode: 'off' })],
+    });
+    const el = document.createElement('ecosee-fan-overlay') as LitElement & { model: unknown };
+    el.model = toFanModel(hass, config);
+    const rec = recordEvents(el);
+    await mount(el);
+
+    const groups = [...el.shadowRoot!.querySelectorAll('.toggle')];
+    expect(groups.map((g) => g.getAttribute('aria-label'))).toEqual(['Fan Mode', 'Swing']);
+    const swingOn = [...groups[1]!.querySelectorAll('.segment')].find(
+      (s) => s.textContent?.trim() === 'On',
+    ) as HTMLButtonElement;
+    swingOn.click();
+    await el.updateComplete;
+    expect(swingOn.classList.contains('selected')).toBe(true);
+
+    const fanOn = [...groups[0]!.querySelectorAll('.segment')].find(
+      (s) => s.textContent?.trim() === 'On',
+    ) as HTMLButtonElement;
+    fanOn.click();
+    await el.updateComplete;
+    expect(fanOn.classList.contains('selected')).toBe(true);
+
+    expect(rec.calls).toEqual([
+      {
+        domain: 'climate',
+        service: 'set_swing_mode',
+        data: { entity_id: 'climate.t', swing_mode: 'on' },
+      },
+      {
+        domain: 'climate',
+        service: 'set_fan_mode',
+        data: { entity_id: 'climate.t', fan_mode: 'on' },
+      },
+    ]);
+    vi.advanceTimersByTime(PICKER_CONFIRM_MS * 4);
+    expect(rec.dismisses).toBe(0);
+  });
+
+  it('dismisses on a tap on the scroll body’s empty area', async () => {
+    const { hass } = fakeHass({ entities: [fanEntity()] });
+    const el = document.createElement('ecosee-fan-overlay') as LitElement & { model: unknown };
+    el.model = toFanModel(hass, config);
+    const rec = recordEvents(el);
+    await mount(el);
+    (el.shadowRoot!.querySelector('.scroll') as HTMLElement).click();
+    expect(rec.dismisses).toBe(1);
+  });
 });

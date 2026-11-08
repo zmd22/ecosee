@@ -5,6 +5,7 @@ import {
   showFanAffordance,
   setFanModeCall,
   setFanMinOnTimeCall,
+  setSwingModeCall,
 } from '../src/climate/fan';
 import type { EcoseeCardConfig } from '../src/config';
 import type { HassEntityBase, HomeAssistant } from '../src/types/hass';
@@ -225,6 +226,80 @@ describe('setFanMinOnTimeCall', () => {
       domain: 'number',
       service: 'set_value',
       data: { entity_id: RUNTIME_ENTITY, value: 15 },
+    });
+  });
+});
+
+describe('toFanModel — swing modes', () => {
+  it('has no swing selector when the entity lists no swing_modes', () => {
+    expect(toFanModel(hass(FULL), config).swing).toEqual([]);
+  });
+
+  it('lists swing_modes with title-cased labels and the current one selected', () => {
+    const model = toFanModel(
+      hass(
+        climate('cool', {
+          ...FULL.attributes,
+          swing_modes: ['off', 'vertical', 'both'],
+          swing_mode: 'vertical',
+        }),
+      ),
+      config,
+    );
+    expect(model.swing).toEqual([
+      {
+        axis: 'vertical',
+        options: [
+          { swingMode: 'off', label: 'Off', selected: false },
+          { swingMode: 'vertical', label: 'Vertical', selected: true },
+          { swingMode: 'both', label: 'Both', selected: false },
+        ],
+      },
+    ]);
+  });
+
+  it('adds a horizontal selector from swing_horizontal_modes, after the vertical one', () => {
+    const model = toFanModel(
+      hass(
+        climate('cool', {
+          ...FULL.attributes,
+          swing_modes: ['off', 'on'],
+          swing_mode: 'off',
+          swing_horizontal_modes: ['off', 'on'],
+          swing_horizontal_mode: 'on',
+        }),
+      ),
+      config,
+    );
+    expect(model.swing.map((s) => s.axis)).toEqual(['vertical', 'horizontal']);
+    expect(model.swing[1]!.options.find((o) => o.selected)?.swingMode).toBe('on');
+  });
+
+  it('keeps the sub-screen available for a swing-only entity (no fan_modes)', () => {
+    const model = toFanModel(
+      hass(climate('cool', { swing_modes: ['off', 'on'], swing_mode: 'off' })),
+      config,
+    );
+    expect(model.available).toBe(true);
+    expect(model.options).toEqual([]);
+    expect(hasFanSpeedControls(model)).toBe(false);
+  });
+});
+
+describe('setSwingModeCall', () => {
+  it('builds climate.set_swing_mode for the vertical axis', () => {
+    expect(setSwingModeCall('both', 'vertical', 'climate.t')).toEqual({
+      domain: 'climate',
+      service: 'set_swing_mode',
+      data: { entity_id: 'climate.t', swing_mode: 'both' },
+    });
+  });
+
+  it('builds climate.set_swing_horizontal_mode for the horizontal axis', () => {
+    expect(setSwingModeCall('on', 'horizontal', 'climate.t')).toEqual({
+      domain: 'climate',
+      service: 'set_swing_horizontal_mode',
+      data: { entity_id: 'climate.t', swing_horizontal_mode: 'on' },
     });
   });
 });
