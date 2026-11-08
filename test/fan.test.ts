@@ -250,9 +250,9 @@ describe('toFanModel — swing modes', () => {
       {
         axis: 'vertical',
         options: [
-          { swingMode: 'off', label: 'Off', selected: false },
-          { swingMode: 'vertical', label: 'Vertical', selected: true },
-          { swingMode: 'both', label: 'Both', selected: false },
+          { swingMode: 'off', label: 'Off', selected: false, icon: 'off' },
+          { swingMode: 'vertical', label: 'Vertical', selected: true, icon: 'vertical' },
+          { swingMode: 'both', label: 'Both', selected: false, icon: 'both' },
         ],
       },
     ]);
@@ -337,5 +337,24 @@ describe('toFanModel — fan-mode icons', () => {
 
   it('leaves unrecognized modes without a glyph', () => {
     expect(iconsOf(['auto', 'diffuse']).diffuse).toBeNull();
+  });
+});
+
+describe('toFanModel — swing icons', () => {
+  const swingOf = (attributes: Record<string, unknown>) =>
+    toFanModel(hass(climate('cool', { ...FULL.attributes, ...attributes })), config).swing;
+
+  it('draws "on" as generic swing on the vertical axis, horizontal on the horizontal axis', () => {
+    const [vertical, horizontal] = swingOf({
+      swing_modes: ['off', 'on'],
+      swing_horizontal_modes: ['off', 'on'],
+    });
+    expect(vertical!.options.map((o) => o.icon)).toEqual(['off', 'on']);
+    expect(horizontal!.options.map((o) => o.icon)).toEqual(['off', 'horizontal']);
+  });
+
+  it('leaves louvre positions without a glyph', () => {
+    const [vertical] = swingOf({ swing_modes: ['off', 'top', 'bottom'] });
+    expect(vertical!.options.map((o) => o.icon)).toEqual(['off', null, null]);
   });
 });

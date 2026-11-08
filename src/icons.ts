@@ -72,6 +72,30 @@ export const fanModeIcons = {
   `),
 };
 
+/** Swing-mode glyphs (Fan sub-screen): a two-headed oscillation arc for swing
+ *  on, the same arc struck through for off, and straight two-headed arrows for
+ *  the vertical / horizontal / both directions. */
+const swingArc = svg`
+  <path d="M5 16.5 A7 7 0 0 1 19 16.5" />
+  <path d="M2.4 14 L5 16.6 L7.6 14" />
+  <path d="M16.4 14 L19 16.6 L21.6 14" />`;
+const swingStroke = (body: SVGTemplateResult): SVGTemplateResult =>
+  wrap(svg`<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+    stroke-linejoin="round">${body}</g>`);
+
+export const swingIcons = {
+  on: swingStroke(swingArc),
+  off: swingStroke(svg`${swingArc}<path d="M5 4.5 L19 19.5" />`),
+  vertical: swingStroke(
+    svg`<path d="M12 3.5 V20.5 M8.5 7 L12 3.5 L15.5 7 M8.5 17 L12 20.5 L15.5 17" />`,
+  ),
+  horizontal: swingStroke(
+    svg`<path d="M3.5 12 H20.5 M7 8.5 L3.5 12 L7 15.5 M17 8.5 L20.5 12 L17 15.5" />`,
+  ),
+  both: swingStroke(svg`<path d="M12 3 V21 M3 12 H21 M9.5 5.5 L12 3 L14.5 5.5 M9.5 18.5 L12 21
+    L14.5 18.5 M5.5 9.5 L3 12 L5.5 14.5 M18.5 9.5 L21 12 L18.5 14.5" />`),
+};
+
 export const icons = {
   /** Main Menu affordance — a cog (gear): a toothed ring with a hollow hub (the
    *  inner circle is a second sub-path, so the even-odd fill punches the hub out).

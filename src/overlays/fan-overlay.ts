@@ -12,7 +12,7 @@ import {
   type SwingModel,
   type SwingOption,
 } from '../climate/fan';
-import { fanModeIcons, fanSpeedGlyph, icons } from '../icons';
+import { fanModeIcons, fanSpeedGlyph, icons, swingIcons } from '../icons';
 import { emitServiceCall } from './service-call-event';
 import { emitOverlayDismiss, reschedulePickerClose } from './overlay-dismiss';
 
@@ -46,6 +46,15 @@ import { emitOverlayDismiss, reschedulePickerClose } from './overlay-dismiss';
  * + the runtime block, or the tab bar's reserved inset), instead of being clipped
  * by the shell's overflow:hidden. Taps on its empty areas still dismiss.
  */
+/** One segment of a selector: its name, whether it is filled, its glyph (null ⇒
+ *  text), and what a tap does. */
+interface Segment {
+  label: string;
+  selected: boolean;
+  glyph: unknown;
+  pick: () => void;
+}
+
 /** The glyph for a fan-mode icon descriptor. */
 function fanIconGlyph(icon: FanIcon): TemplateResult | ReturnType<typeof fanSpeedGlyph> {
   return icon.kind === 'speed' ? fanSpeedGlyph(icon.level, icon.of) : fanModeIcons[icon.kind];
@@ -249,7 +258,7 @@ export class EcoseeFanOverlay extends LitElement {
     .fan.dense .title {
       font-size: 6.5cqw;
     }
-    .fan.dense .segment {
+    .fan.dense .toggle:not(.icons) .segment {
       font-size: 6cqw;
       padding: 2.4cqw 7cqw;
     }
@@ -439,52 +448,15 @@ export class EcoseeFanOverlay extends LitElement {
   private _renderFanModes(options: FanOption[]): TemplateResult {
     // While a pick is pending, the optimistic choice wins the fill; otherwise it
     // follows the entity's reported fan mode.
-    const isSelected = (option: FanOption): boolean =>
-      this._pending !== null ? option.fanMode === this._pending : option.selected;
-    // Icon layout: when every mode has a glyph, the segments are compact icons in
-    // one row (two rows past five), and the selected mode's name is captioned
-    // beneath so the glyphs never have to be guessed. Any mode without a glyph
-    // keeps the text layout: two modes in the horizontal pill, more as a
-    // two-column N-way selector (issue #44).
-    const iconic = options.every((option) => option.icon !== null);
-    const layout = iconic ? 'icons' : options.length > 2 ? 'stacked' : '';
-    const columns = options.length <= 5 ? options.length : Math.ceil(options.length / 2);
-    const current = options.find(isSelected);
-    return html`
-      <div class="group">
-        <h2 class="title">Fan Mode</h2>
-        <div
-          class="toggle ${layout}"
-          role="group"
-          aria-label="Fan Mode"
-          style=${iconic ? `--cols: ${columns}` : ''}
-        >
-          ${options.map((option) => {
-            const selected = isSelected(option);
-            return html`
-              <button
-                class="segment ${selected ? 'selected' : ''}"
-                aria-pressed=${selected}
-                title=${option.label}
-                @click=${() => this._selectMode(option)}
-              >
-                ${
-                  iconic && option.icon
-                    ? html`<span class="glyph">${fanIconGlyph(option.icon)}</span
-                        ><span class="sr-only">${option.label}</span>`
-                    : option.label
-                }
-              </button>
-            `;
-          })}
-        </div>
-        ${
-          iconic
-            ? html`<p class="caption" aria-hidden="true">${current?.label ?? '\u00a0'}</p>`
-            : nothing
-        }
-      </div>
-    `;
+    return this._renderSelector(
+      'Fan Mode',
+      options.map((option) => ({
+        label: option.label,
+        selected: this._pending !== null ? option.fanMode === this._pending : option.selected,
+        glyph: option.icon ? fanIconGlyph(option.icon) : null,
+        pick: () => this._selectMode(option),
+      })),
+    );
   }
 
   private _renderSwing(swing: SwingModel, bothAxes: boolean): TemplateResult {
@@ -494,24 +466,59 @@ export class EcoseeFanOverlay extends LitElement {
         : 'Vertical Swing'
       : 'Swing';
     const pending = this._pendingSwing[swing.axis];
-    const stacked = swing.options.length > 2;
+    return this._renderSelector(
+      title,
+      swing.options.map((option) => ({
+        label: option.label,
+        selected: pending !== undefined ? option.swingMode === pending : option.selected,
+        glyph: option.icon ? swingIcons[option.icon] : null,
+        pick: () => this._selectSwing(swing, option),
+      })),
+    );
+  }
+
+  /** One titled selector (Fan Mode, Swing). Icon layout when every option has a
+   *  glyph: compact glyph segments in one row (two rows past five) with the
+   *  selected option's name captioned beneath, so a glyph never has to be guessed.
+   *  Any option without a glyph keeps the text layout: two options in the
+   *  horizontal pill, more as a two-column N-way selector (issue #44). */
+  private _renderSelector(title: string, segments: Segment[]): TemplateResult {
+    const iconic = segments.every((segment) => segment.glyph !== null);
+    const layout = iconic ? 'icons' : segments.length > 2 ? 'stacked' : '';
+    const columns = segments.length <= 5 ? segments.length : Math.ceil(segments.length / 2);
+    const current = segments.find((segment) => segment.selected);
     return html`
-      <div class="group swing">
+      <div class="group">
         <h2 class="title">${title}</h2>
-        <div class="toggle ${stacked ? 'stacked' : ''}" role="group" aria-label=${title}>
-          ${swing.options.map((option) => {
-            const selected = pending !== undefined ? option.swingMode === pending : option.selected;
-            return html`
+        <div
+          class="toggle ${layout}"
+          role="group"
+          aria-label=${title}
+          style=${iconic ? `--cols: ${columns}` : ''}
+        >
+          ${segments.map(
+            (segment) => html`
               <button
-                class="segment ${selected ? 'selected' : ''}"
-                aria-pressed=${selected}
-                @click=${() => this._selectSwing(swing, option)}
+                class="segment ${segment.selected ? 'selected' : ''}"
+                aria-pressed=${segment.selected}
+                title=${segment.label}
+                @click=${segment.pick}
               >
-                ${option.label}
+                ${
+                  iconic
+                    ? html`<span class="glyph">${segment.glyph}</span
+                        ><span class="sr-only">${segment.label}</span>`
+                    : segment.label
+                }
               </button>
-            `;
-          })}
+            `,
+          )}
         </div>
+        ${
+          iconic
+            ? html`<p class="caption" aria-hidden="true">${current?.label ?? '\u00a0'}</p>`
+            : nothing
+        }
       </div>
     `;
   }

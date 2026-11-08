@@ -56,6 +56,37 @@ export interface SwingOption {
   swingMode: string;
   label: string;
   selected: boolean;
+  /** The glyph standing in for the label, or `null` for an unrecognized mode
+   *  (e.g. a louvre position) — the selector then falls back to text. */
+  icon: SwingIcon | null;
+}
+
+/** What a swing glyph depicts: stopped, a generic oscillation, or a direction. */
+export type SwingIcon = 'off' | 'on' | 'vertical' | 'horizontal' | 'both';
+
+/** Swing-mode strings → glyph. On the horizontal axis a plain "on" is drawn as
+ *  the horizontal arrow (that is what it means there). */
+const SWING_ICONS: Record<string, SwingIcon> = {
+  off: 'off',
+  stop: 'off',
+  stopped: 'off',
+  fixed: 'off',
+  on: 'on',
+  auto: 'on',
+  swing: 'on',
+  vertical: 'vertical',
+  updown: 'vertical',
+  up_down: 'vertical',
+  horizontal: 'horizontal',
+  leftright: 'horizontal',
+  left_right: 'horizontal',
+  both: 'both',
+  '3d': 'both',
+};
+
+function swingIcon(mode: string, axis: SwingAxis): SwingIcon | null {
+  const icon = SWING_ICONS[mode.toLowerCase()] ?? null;
+  return axis === 'horizontal' && icon === 'on' ? 'horizontal' : icon;
 }
 
 /** Which swing axis a selector drives: Home Assistant's `swing_mode` (vertical /
@@ -243,6 +274,7 @@ function toSwingModel(
       swingMode,
       label: labelFor(swingMode),
       selected: swingMode === current,
+      icon: swingIcon(swingMode, axis),
     })),
   };
 }
