@@ -277,8 +277,9 @@ describe('Fan picker — mode selects-and-closes, runtime applies without closin
     const rec = recordEvents(el);
     await mount(el);
 
+    // Every mode here has a glyph, so they render as icon segments, not text.
     const toggle = el.shadowRoot!.querySelector('.toggle')!;
-    expect(toggle.classList.contains('stacked')).toBe(true);
+    expect(toggle.classList.contains('icons')).toBe(true);
 
     const segments = [...el.shadowRoot!.querySelectorAll('.segment')] as HTMLButtonElement[];
     expect(segments.map((s) => s.textContent?.trim())).toEqual([
@@ -355,5 +356,27 @@ describe('Fan picker — mode selects-and-closes, runtime applies without closin
     await mount(el);
     (el.shadowRoot!.querySelector('.scroll') as HTMLElement).click();
     expect(rec.dismisses).toBe(1);
+  });
+
+  it('falls back to the text layout when any mode has no glyph', async () => {
+    const { hass } = fakeHass({
+      entities: [fanEntity({ fan_modes: ['auto', 'low', 'diffuse'], fan_mode: 'auto' })],
+    });
+    const el = document.createElement('ecosee-fan-overlay') as LitElement & { model: unknown };
+    el.model = toFanModel(hass, config);
+    await mount(el);
+    const toggle = el.shadowRoot!.querySelector('.toggle')!;
+    expect(toggle.classList.contains('stacked')).toBe(true);
+    expect(el.shadowRoot!.querySelector('.caption')).toBeNull();
+  });
+
+  it('captions the selected mode under the icon row', async () => {
+    const { hass } = fakeHass({
+      entities: [fanEntity({ fan_modes: ['auto', 'low', 'high'], fan_mode: 'high' })],
+    });
+    const el = document.createElement('ecosee-fan-overlay') as LitElement & { model: unknown };
+    el.model = toFanModel(hass, config);
+    await mount(el);
+    expect(el.shadowRoot!.querySelector('.caption')?.textContent?.trim()).toBe('High');
   });
 });

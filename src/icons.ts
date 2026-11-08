@@ -21,6 +21,57 @@ export function batteryGlyph(level: number | null): SVGTemplateResult {
   `);
 }
 
+/** Fan speed: `of` ascending bars, the first `level` filled and the rest outlined. */
+export function fanSpeedGlyph(level: number, of: number): SVGTemplateResult {
+  const count = Math.max(1, of);
+  const gap = count > 4 ? 1.2 : 1.8;
+  const width = (18 - gap * (count - 1)) / count;
+  const bars = Array.from({ length: count }, (_, i) => {
+    const height = count === 1 ? 14 : 5 + (11 * i) / (count - 1);
+    const inset = i < level ? 0 : 0.6;
+    return svg`<rect x=${3 + i * (width + gap) + inset} y=${20 - height + inset}
+      width=${width - 2 * inset} height=${height - 2 * inset} rx="1"
+      fill=${i < level ? 'currentColor' : 'none'} stroke="currentColor"
+      stroke-width=${i < level ? 0 : 1.2} />`;
+  });
+  return wrap(svg`${bars}`);
+}
+
+/** The four fan blades + hub, reused by the fan-mode glyphs. */
+const fanBlades = (transform = ''): SVGTemplateResult => svg`
+  <g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+    stroke-linejoin="round" transform=${transform}>
+    <circle cx="12" cy="12" r="1.8" fill="currentColor" stroke="none" />
+    <path d="M12 10.2 C12 6 11 3.5 13.5 3.5 C16 3.5 15.5 8 12 10.2 Z" />
+    <path d="M13.8 12 C18 12 20.5 11 20.5 13.5 C20.5 16 16 15.5 13.8 12 Z" />
+    <path d="M10.2 12 C6 12 3.5 13 3.5 10.5 C3.5 8 8 8.5 10.2 12 Z" />
+    <path d="M12 13.8 C12 18 13 20.5 10.5 20.5 C8 20.5 8.5 16 12 13.8 Z" />
+  </g>`;
+
+/** Fan-mode glyphs (Fan sub-screen): Auto is the fan with an "A" badge, Off the
+ *  fan struck through, Quiet a moon, Turbo a bolt, On the plain fan. */
+export const fanModeIcons = {
+  auto: wrap(svg`
+    ${fanBlades('translate(-1.4 -1.4) scale(0.8)')}
+    <path d="M14.6 21.5 L17.6 13.8 L20.6 21.5 M15.8 18.6 H19.4" fill="none"
+      stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+      stroke-linejoin="round" />
+  `),
+  on: wrap(fanBlades()),
+  off: wrap(svg`
+    ${fanBlades()}
+    <path d="M4 4 L20 20" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" />
+  `),
+  quiet: wrap(svg`
+    <path d="M18.5 14.6 A7.4 7.4 0 1 1 9.6 5.1 A5.9 5.9 0 0 0 18.5 14.6 Z" fill="none"
+      stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" />
+  `),
+  turbo: wrap(svg`
+    <path d="M13.5 2.8 L5.5 13.4 H11.2 L10.2 21.2 L18.5 10.4 H12.7 Z" fill="none"
+      stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" />
+  `),
+};
+
 export const icons = {
   /** Main Menu affordance — a cog (gear): a toothed ring with a hollow hub (the
    *  inner circle is a second sub-path, so the even-odd fill punches the hub out).

@@ -4,6 +4,7 @@ import {
   setFanModeCall,
   setFanMinOnTimeCall,
   setSwingModeCall,
+  type FanIcon,
   type FanModel,
   type FanOption,
   type MinRuntimeModel,
@@ -11,7 +12,7 @@ import {
   type SwingModel,
   type SwingOption,
 } from '../climate/fan';
-import { icons } from '../icons';
+import { fanModeIcons, fanSpeedGlyph, icons } from '../icons';
 import { emitServiceCall } from './service-call-event';
 import { emitOverlayDismiss, reschedulePickerClose } from './overlay-dismiss';
 
@@ -45,6 +46,11 @@ import { emitOverlayDismiss, reschedulePickerClose } from './overlay-dismiss';
  * + the runtime block, or the tab bar's reserved inset), instead of being clipped
  * by the shell's overflow:hidden. Taps on its empty areas still dismiss.
  */
+/** The glyph for a fan-mode icon descriptor. */
+function fanIconGlyph(icon: FanIcon): TemplateResult | ReturnType<typeof fanSpeedGlyph> {
+  return icon.kind === 'speed' ? fanSpeedGlyph(icon.level, icon.of) : fanModeIcons[icon.kind];
+}
+
 @customElement('ecosee-fan-overlay')
 export class EcoseeFanOverlay extends LitElement {
   /** The fan options + swing + optional runtime selector, derived by the host from `hass`. */
@@ -198,6 +204,45 @@ export class EcoseeFanOverlay extends LitElement {
     }
     .toggle.stacked .segment:last-child:nth-child(odd) {
       grid-column: 1 / -1;
+    }
+
+    /* Icon layout: compact glyph segments in a --cols-wide grid (one row up to
+       five modes), the active one filled, with the active mode named below. */
+    .toggle.icons {
+      display: inline-grid;
+      grid-template-columns: repeat(var(--cols, 4), auto);
+      gap: 1.2cqw;
+      border-radius: 9cqw;
+    }
+    .toggle.icons .segment {
+      min-width: 0;
+      padding: 2.4cqw 3.4cqw;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .toggle.icons .glyph {
+      display: block;
+      width: 8.5cqw;
+      height: 8.5cqw;
+    }
+    .toggle.icons .glyph svg {
+      display: block;
+    }
+    .caption {
+      margin: -1.5cqw 0 0;
+      font-size: 5.5cqw;
+      font-weight: 500;
+      color: var(--ecosee-accent, #62cfe9);
+      opacity: 0.85;
+    }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
     }
 
     /* With swing present the screen carries two selectors, so tighten the type. */
@@ -392,30 +437,52 @@ export class EcoseeFanOverlay extends LitElement {
   }
 
   private _renderFanModes(options: FanOption[]): TemplateResult {
-    // Two modes (the device's On / Auto) fit the horizontal pill; more than that
-    // (a multi-speed fan: low / medium / high / …) would cram a stretched pill, so
-    // lay them out as a two-column N-way selector instead (issue #44).
-    const stacked = options.length > 2;
+    // While a pick is pending, the optimistic choice wins the fill; otherwise it
+    // follows the entity's reported fan mode.
+    const isSelected = (option: FanOption): boolean =>
+      this._pending !== null ? option.fanMode === this._pending : option.selected;
+    // Icon layout: when every mode has a glyph, the segments are compact icons in
+    // one row (two rows past five), and the selected mode's name is captioned
+    // beneath so the glyphs never have to be guessed. Any mode without a glyph
+    // keeps the text layout: two modes in the horizontal pill, more as a
+    // two-column N-way selector (issue #44).
+    const iconic = options.every((option) => option.icon !== null);
+    const layout = iconic ? 'icons' : options.length > 2 ? 'stacked' : '';
+    const columns = options.length <= 5 ? options.length : Math.ceil(options.length / 2);
+    const current = options.find(isSelected);
     return html`
       <div class="group">
         <h2 class="title">Fan Mode</h2>
-        <div class="toggle ${stacked ? 'stacked' : ''}" role="group" aria-label="Fan Mode">
+        <div
+          class="toggle ${layout}"
+          role="group"
+          aria-label="Fan Mode"
+          style=${iconic ? `--cols: ${columns}` : ''}
+        >
           ${options.map((option) => {
-            // While a pick is pending, the optimistic choice wins the fill;
-            // otherwise it follows the entity's reported fan mode.
-            const selected =
-              this._pending !== null ? option.fanMode === this._pending : option.selected;
+            const selected = isSelected(option);
             return html`
               <button
                 class="segment ${selected ? 'selected' : ''}"
                 aria-pressed=${selected}
+                title=${option.label}
                 @click=${() => this._selectMode(option)}
               >
-                ${option.label}
+                ${
+                  iconic && option.icon
+                    ? html`<span class="glyph">${fanIconGlyph(option.icon)}</span
+                        ><span class="sr-only">${option.label}</span>`
+                    : option.label
+                }
               </button>
             `;
           })}
         </div>
+        ${
+          iconic
+            ? html`<p class="caption" aria-hidden="true">${current?.label ?? '\u00a0'}</p>`
+            : nothing
+        }
       </div>
     `;
   }

@@ -303,3 +303,39 @@ describe('setSwingModeCall', () => {
     });
   });
 });
+
+describe('toFanModel — fan-mode icons', () => {
+  const iconsOf = (fan_modes: string[]) =>
+    Object.fromEntries(
+      toFanModel(hass(climate('cool', { fan_modes, fan_mode: fan_modes[0] })), config).options.map(
+        (o) => [o.fanMode, o.icon],
+      ),
+    );
+
+  it('maps the named modes to their glyphs', () => {
+    expect(iconsOf(['auto', 'on', 'off', 'quiet', 'turbo'])).toEqual({
+      auto: { kind: 'auto' },
+      on: { kind: 'on' },
+      off: { kind: 'off' },
+      quiet: { kind: 'quiet' },
+      turbo: { kind: 'turbo' },
+    });
+  });
+
+  it('ranks speeds against the entity’s own speed steps', () => {
+    expect(iconsOf(['high', 'low', 'medium'])).toEqual({
+      low: { kind: 'speed', level: 1, of: 3 },
+      medium: { kind: 'speed', level: 2, of: 3 },
+      high: { kind: 'speed', level: 3, of: 3 },
+    });
+    expect(iconsOf(['low', 'medium_low', 'medium', 'medium_high', 'high']).medium_high).toEqual({
+      kind: 'speed',
+      level: 4,
+      of: 5,
+    });
+  });
+
+  it('leaves unrecognized modes without a glyph', () => {
+    expect(iconsOf(['auto', 'diffuse']).diffuse).toBeNull();
+  });
+});

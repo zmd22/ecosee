@@ -22,7 +22,16 @@ export interface FanOption {
   fanMode: string;
   label: string;
   selected: boolean;
+  /** The glyph standing in for the label, or `null` when the mode has no
+   *  recognized meaning (the selector then falls back to text). */
+  icon: FanIcon | null;
 }
+
+/** What a fan-mode glyph depicts: a named mode, or a speed as `level` of `of`
+ *  ascending bars (the entity's own number of speed steps). */
+export type FanIcon =
+  | { kind: 'auto' | 'on' | 'off' | 'quiet' | 'turbo' }
+  | { kind: 'speed'; level: number; of: number };
 
 /** One selectable minimum-runtime value, in minutes per hour. */
 export interface MinRuntimeOption {
@@ -94,6 +103,52 @@ function labelFor(fanMode: string): string {
     .split('_')
     .map((word) => (word ? word.charAt(0).toUpperCase() + word.slice(1) : word))
     .join(' ');
+}
+
+/** Named, non-speed fan modes and the glyph each maps to. */
+const NAMED_ICONS: Record<string, 'auto' | 'on' | 'off' | 'quiet' | 'turbo'> = {
+  auto: 'auto',
+  on: 'on',
+  off: 'off',
+  quiet: 'quiet',
+  silent: 'quiet',
+  sleep: 'quiet',
+  night: 'quiet',
+  turbo: 'turbo',
+  boost: 'turbo',
+  powerful: 'turbo',
+  strong: 'turbo',
+  max: 'turbo',
+};
+
+/** Speed modes, slowest → fastest. A mode's bar count is its rank among the speed
+ *  modes the entity actually lists, so a 3-speed fan shows 1/3, 2/3, 3/3 and a
+ *  5-speed fan 1/5 … 5/5. */
+const SPEED_ORDER: readonly string[] = [
+  'lowest',
+  'low',
+  'medium_low',
+  'mid_low',
+  'medium',
+  'mid',
+  'middle',
+  'medium_high',
+  'mid_high',
+  'high',
+  'highest',
+];
+
+function fanIcons(modes: string[]): Map<string, FanIcon> {
+  const icons = new Map<string, FanIcon>();
+  const speeds = SPEED_ORDER.filter((mode) => modes.includes(mode));
+  speeds.forEach((mode, index) =>
+    icons.set(mode, { kind: 'speed', level: index + 1, of: speeds.length }),
+  );
+  for (const mode of modes) {
+    const named = NAMED_ICONS[mode];
+    if (named) icons.set(mode, { kind: named });
+  }
+  return icons;
 }
 
 /** Order the entity's fan modes: the recognized device modes first (in FAN_ORDER),
@@ -199,10 +254,13 @@ export function toFanModel(hass: HomeAssistant, config: EcoseeCardConfig): FanMo
   const attributes = entity.attributes as Record<string, unknown>;
   const current = typeof attributes.fan_mode === 'string' ? attributes.fan_mode : null;
 
-  const options: FanOption[] = orderFanModes(stringList(attributes.fan_modes)).map((fanMode) => ({
+  const modes = orderFanModes(stringList(attributes.fan_modes));
+  const icons = fanIcons(modes);
+  const options: FanOption[] = modes.map((fanMode) => ({
     fanMode,
     label: labelFor(fanMode),
     selected: fanMode === current,
+    icon: icons.get(fanMode) ?? null,
   }));
 
   const swing = [
